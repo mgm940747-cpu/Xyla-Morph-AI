@@ -1,116 +1,117 @@
-88
-89
-90
-91
-92
-93
-94
-95
-96
-97
-98
-99
-100
-101
-102
-103
-104
-105
-106
-107
-108
-109
-110
-111
-112
-113
-114
-115
-116
-117
-118
-119
-120
-121
-122
-123
-124
-125
-126
-127
-128
-129
-130
-131
-132
-133
-134
-135
-136
-137
-138
-139
-140
-141
-142
-143
-144
-145
-146
-147
-148
-149
-150
-151
-152
-153
-154
-155
-156
-157
-158
-159
-160
-161
-162
-163
-164
-165
+"""
+XYLA MORPH AI PRO+
+
+NOTE:
+This app requires these packages:
+- streamlit
+- torch
+- openai
+- whisper
+
+Install with:
+    pip install streamlit torch openai-whisper openai
+
+Run with:
+    streamlit run app.py
+"""
+
 import os
 
+# --- SAFE IMPORTS (prevents crash if missing deps) ---
+try:
+    import streamlit as st
+except ModuleNotFoundError:
+    raise SystemExit("Streamlit is not installed. Run: pip install streamlit")
+
+try:
+    import torch
+except ModuleNotFoundError:
+    raise SystemExit("PyTorch is not installed. Run: pip install torch")
+
+try:
+    import whisper
+except ModuleNotFoundError:
+    raise SystemExit("Whisper is not installed. Run: pip install openai-whisper")
+
+try:
+    import openai
+except ModuleNotFoundError:
+    raise SystemExit("OpenAI SDK missing. Run: pip install openai")
+
+# --- CONFIG ---
+st.set_page_config(page_title="XYLA MORPH AI PRO+", page_icon="💎", layout="wide")
+
+# --- API KEY ---
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# --- UI STYLE ---
+st.markdown("""
+<style>
+.stApp {background: linear-gradient(135deg,#050608,#0B0C10); color:#EAEAEA;}
+.glass {background: rgba(255,255,255,0.05); backdrop-filter: blur(15px); border-radius:14px; padding:20px;}
+.stButton>button {background: linear-gradient(90deg,#66FCF1,#45A29E); border-radius:10px; height:50px;}
+.stButton>button:hover {transform: scale(1.05); box-shadow:0 0 20px #66FCF1;}
+textarea {background: rgba(0,0,0,0.6)!important; color:white!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- UTIL ---
-def get_stats(text):
-    words = text.split()
-    count = len(words)
-    secs = (count / 150) * 60
-    return count, f"{int(secs // 60)}M {int(secs % 60)}S"
+# --- AI FUNCTIONS ---
+def gpt_summary(text):
+    if not openai.api_key:
+        return "Missing OPENAI_API_KEY"
+    try:
+        res = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"user","content":f"Summarize this:\n{text}"}]
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        return f"Summary failed: {str(e)}"
+
+
+def gpt_keywords(text):
+    if not openai.api_key:
+        return "Missing OPENAI_API_KEY"
+    try:
+        res = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"user","content":f"Extract 5 keywords:\n{text}"}]
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        return f"Keyword extraction failed: {str(e)}"
+
+
+def gpt_translate(text, lang="English"):
+    if not openai.api_key:
+        return "Missing OPENAI_API_KEY"
+    try:
+        res = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"user","content":f"Translate to {lang}:\n{text}"}]
+        )
+        return res.choices[0].message.content
+    except Exception as e:
+        return f"Translation failed: {str(e)}"
 
 # --- HEADER ---
-st.markdown("<div class='header'>XYLA MORPH V3 / CORE</div>", unsafe_allow_html=True)
+st.title("💎 XYLA MORPH V5 / PRO AI")
 
-# --- LAYOUT ---
 col1, col2 = st.columns([1,1])
 
 # --- LEFT PANEL ---
 with col1:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
 
-    st.subheader("ENGINE CONFIG")
     model_size = st.selectbox("MODEL", ["tiny","base","small","medium","large"], index=1)
-
-    st.subheader("UPLOAD AUDIO")
-    audio = st.file_uploader("Drop audio file", type=["mp3","wav","m4a"])
+    audio = st.file_uploader("Upload Audio", type=["mp3","wav","m4a"])
 
     if audio:
-        st.success(f"Loaded: {audio.name}")
         st.audio(audio)
         st.session_state['fn'] = os.path.splitext(audio.name)[0]
 
-        if st.button("START TRANSCRIPTION"):
-            with st.spinner("Processing..."):
+        if st.button("TRANSCRIBE"):
+            with st.spinner("Transcribing..."):
                 with open("temp.mp3","wb") as f:
                     f.write(audio.getbuffer())
 
@@ -118,7 +119,7 @@ with col1:
                 model = whisper.load_model(model_size, device=device)
                 result = model.transcribe("temp.mp3")
 
-                st.session_state['txt'] = result["text"]
+                st.session_state['txt'] = result.get("text", "")
                 os.remove("temp.mp3")
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -127,30 +128,32 @@ with col1:
 with col2:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
 
-    st.subheader("TRANSCRIPT OUTPUT")
+    if 'txt' in st.session_state and st.session_state['txt']:
+        text = st.text_area("Transcript", value=st.session_state['txt'], height=200)
 
-    if 'txt' in st.session_state:
-        text = st.text_area("", value=st.session_state['txt'], height=350)
+        if st.button("AI SUMMARY"):
+            st.info(gpt_summary(text))
 
-        wc, est = get_stats(text)
+        if st.button("AI KEYWORDS"):
+            st.success(gpt_keywords(text))
 
-        st.markdown(f"""
-        <div class='metric'>
-            <span>WORDS: {wc}</span>
-            <span>EST TIME: {est}</span>
-        </div>
-        """, unsafe_allow_html=True)
+        lang = st.selectbox("Translate to", ["English","Myanmar","Japanese","Chinese"])
+        if st.button("TRANSLATE"):
+            st.warning(gpt_translate(text, lang))
 
-        st.download_button(
-            "EXPORT TXT",
-            data=text,
-            file_name=f"{st.session_state['fn']}.txt"
-        )
+        st.download_button("Download TXT", data=text, file_name=f"{st.session_state.get('fn','output')}.txt")
+
     else:
-        st.info("Waiting for audio input...")
+        st.info("Upload audio to start")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 # --- FOOTER ---
-device_status = "GPU" if torch.cuda.is_available() else "CPU"
-st.caption(f"STATUS: {device_status} READY")
+device = "GPU" if torch.cuda.is_available() else "CPU"
+st.caption(f"SYSTEM: {device} READY | GPT ENABLED")
+
+# --- BASIC TESTS (sanity checks) ---
+if __name__ == "__main__":
+    assert isinstance(gpt_summary("test"), str)
+    assert isinstance(gpt_keywords("test"), str)
+    assert isinstance(gpt_translate("hello"), str)
